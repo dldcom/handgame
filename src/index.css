@@ -1,0 +1,31 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;800;900&family=Nanum+Gothic:wght@400;700;800&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --shadow-brutal: 8px 8px 0px 0px rgba(0,0,0,1);
+  --shadow-brutal-sm: 4px 4px 0px 0px rgba(0,0,0,1);
+  --shadow-brutal-xs: 2px 2px 0px 0px rgba(0,0,0,1);
+}
+
+body {
+  margin: 0;
+  font-family: 'Outfit', 'Nanum Gothic', -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: #FFFDE7; /* 네오브루탈리즘 특유의 힙하고 따뜻한 버터밀크 옐로우 색상 */
+  color: #000000;
+  overflow-x: hidden;
+}
+
+/* 힙한 네오브루탈리즘 인터랙션 유틸리티 */
+.brutal-btn-transition {
+  transition: all 0.15s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.brutal-btn-hover:hover {
+  transform: translate(-4px, -4px);
+  box-shadow: 12px 12px 0px 0px rgba(0,0,0,1);
+}
+
+.brutal-btn-active:active {
+  transform: translate(2px, 2px);
+  box-shadow: 4px 4px 0px 0px rgba(0,0,0,1);
+}
