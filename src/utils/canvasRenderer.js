@@ -40,7 +40,7 @@ function getConnectionColor(from, to) {
  * @param {boolean} normalizeSize - 손의 크기와 위치를 224x224 화면 정중앙에 꽉 차도록 정규화할지 여부 (기본값: true)
  * @returns {Promise<Blob>} PNG 이미지 Blob
  */
-export function drawSkeletonToBlob(landmarks, normalizeSize = true) {
+export function drawSkeletonToBlob(hands, options = {}) {
   return new Promise((resolve, reject) => {
     // 1. 메모리 상에 가상의 224x224 도화지 생성
     const canvas = document.createElement('canvas');
@@ -57,70 +57,102 @@ export function drawSkeletonToBlob(landmarks, normalizeSize = true) {
     ctx.fillStyle = '#000000';
     ctx.fillRect(0, 0, 224, 224);
 
-    if (!landmarks || landmarks.length < 21) {
-      // 감지된 손이 없는 경우, 텅 빈 검은 화면 반환
+    // 하위 호환성 및 단일/양손 배열 처리
+    // hands가 없거나 비어있는 경우
+    if (!hands || hands.length === 0) {
       canvas.toBlob((blob) => resolve(blob), 'image/png');
       return;
     }
 
-    // 3. 손 좌표 정규화 작업 (손의 크기나 거리 차이 극복)
-    let processedPoints = [];
-    if (normalizeSize) {
-      // 3-1. 손의 바운딩 박스(최소/최대 좌표)를 구합니다.
-      let minX = Infinity, maxX = -Infinity;
-      let minY = Infinity, maxY = -Infinity;
+    // 단일 손 배열([pt0, pt1, ...])이 직접 인자로 들어온 경우 이중 배열([[pt0, pt1, ...]])로 감싸주어 규격화
+    const handsArray = (hands.length > 0 && !Array.isArray(hands[0])) ? [hands] : hands;
 
-      landmarks.forEach(pt => {
-        if (pt.x < minX) minX = pt.x;
-        if (pt.x > maxX) maxX = pt.x;
-        if (pt.y < minY) minY = pt.y;
-        if (pt.y > maxY) maxY = pt.y;
-      });
+    // options 인자가 기존의 boolean(normalizeSize) 형태로 넘어온 경우에 대응
+    const normalizeSize = typeof options === 'boolean' ? options : (options.normalizeSize ?? false);
+    const videoWidth = options.videoWidth ?? 640;
+    const videoHeight = options.videoHeight ?? 480;
 
-      const width = maxX - minX;
-      const height = maxY - minY;
-      const centerX = (minX + maxX) / 2;
-      const centerY = (minY + maxY) / 2;
+    // 3. 손 관절 좌표 변환 (정규화 혹은 크롭 비례 매핑)
+    const processedHands = [];
 
-      // 3-2. 224 픽셀의 약 75% 영역을 손이 차지하도록 크기(Scale)와 중심 이동값 적용
-      const maxDim = Math.max(width, height);
-      const targetSize = 224 * 0.75; // 여백 25% 확보
-      const scale = maxDim > 0 ? targetSize / maxDim : 1;
+    handsArray.forEach(handLandmarks => {
+      if (!handLandmarks || handLandmarks.length < 21) return;
 
-      processedPoints = landmarks.map(pt => ({
-        x: 112 + (pt.x - centerX) * scale,
-        y: 112 + (pt.y - centerY) * scale
-      }));
-    } else {
-      // 정규화를 안 할 경우, 단순히 0~1 값을 224 크기에 곱해줍니다.
-      processedPoints = landmarks.map(pt => ({
-        x: pt.x * 224,
-        y: pt.y * 224
-      }));
-    }
+      let processedPoints = [];
+
+      if (normalizeSize) {
+        // 기존 방식: 개별 손을 구속 상자 중앙에 75% 크기로 채워 넣기 (위치 소멸)
+        let minX = Infinity, maxX = -Infinity;
+        let minY = Infinity, maxY = -Infinity;
+
+        handLandmarks.forEach(pt => {
+          if (pt.x < minX) minX = pt.x;
+          if (pt.x > maxX) maxX = pt.x;
+          if (pt.y < minY) minY = pt.y;
+          if (pt.y > maxY) maxY = pt.y;
+        });
+
+        const width = maxX - minX;
+        const height = maxY - minY;
+        const centerX = (minX + maxX) / 2;
+        const centerY = (minY + maxY) / 2;
+
+        const maxDim = Math.max(width, height);
+        const targetSize = 224 * 0.75;
+        const scale = maxDim > 0 ? targetSize / maxDim : 1;
+
+        processedPoints = handLandmarks.map(pt => ({
+          x: 112 + (pt.x - centerX) * scale,
+          y: 112 + (pt.y - centerY) * scale
+        }));
+      } else {
+        // 개선 방식 (위치 보존): 웹캠 비디오의 1:1 중앙 크롭 영역 대비 좌표 비율을 224 크기에 그대로 적용
+        const size = Math.min(videoWidth, videoHeight);
+        const sx = (videoWidth - size) / 2;
+        const sy = (videoHeight - size) / 2;
+
+        processedPoints = handLandmarks.map(pt => {
+          // 1. 원본 비디오 상의 픽셀 좌표 계산
+          const px = pt.x * videoWidth;
+          const py = pt.y * videoHeight;
+          // 2. 1:1 크롭 영역 원점(좌상단) 기준 픽셀 좌표로 보정
+          const cx = px - sx;
+          const cy = py - sy;
+          // 3. 224 도화지에 비례 투영
+          return {
+            x: (cx / size) * 224,
+            y: (cy / size) * 224
+          };
+        });
+      }
+
+      processedHands.push(processedPoints);
+    });
 
     // 4. 관절 연결선 그리기 (선 굵기는 224x224 사이즈에 맞춰 4px로 선명하게 고정)
     ctx.lineWidth = 4;
     ctx.lineCap = 'round';
     ctx.lineJoin = 'round';
 
-    HAND_CONNECTIONS.forEach(([from, to]) => {
-      const start = processedPoints[from];
-      const end = processedPoints[to];
+    processedHands.forEach(points => {
+      HAND_CONNECTIONS.forEach(([from, to]) => {
+        const start = points[from];
+        const end = points[to];
 
-      ctx.beginPath();
-      ctx.moveTo(start.x, start.y);
-      ctx.lineTo(end.x, end.y);
-      ctx.strokeStyle = getConnectionColor(from, to);
-      ctx.stroke();
-    });
+        ctx.beginPath();
+        ctx.moveTo(start.x, start.y);
+        ctx.lineTo(end.x, end.y);
+        ctx.strokeStyle = getConnectionColor(from, to);
+        ctx.stroke();
+      });
 
-    // 5. 각 관절에 작은 원형 조인트(Joint) 그리기 (관절 형태 강화)
-    ctx.fillStyle = '#FFFFFF'; // 흰색 점
-    processedPoints.forEach(pt => {
-      ctx.beginPath();
-      ctx.arc(pt.x, pt.y, 3, 0, 2 * Math.PI);
-      ctx.fill();
+      // 5. 각 관절에 작은 원형 조인트(Joint) 그리기
+      ctx.fillStyle = '#FFFFFF';
+      points.forEach(pt => {
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 3, 0, 2 * Math.PI);
+        ctx.fill();
+      });
     });
 
     // 6. PNG Blob 형식으로 변환하여 반환

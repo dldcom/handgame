@@ -7,11 +7,11 @@ import './App.css';
 
 // 학습할 단어 목록 및 가이드 팁
 const WORD_LIST = [
-  { id: 'hello', word: '안녕하세요', tip: '두 손을 가볍게 펴고 명치부근에서 아래로 쓸어내려요! 👋', guideImg: 'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?auto=format&fit=crop&w=120&h=120&q=80' },
-  { id: 'thankyou', word: '감사합니다', tip: '오른손 손날로 왼손 등 위를 가볍게 두 번 탭해요! 🤝', guideImg: 'https://images.unsplash.com/photo-1530811751254-e579b17c47d9?auto=format&fit=crop&w=120&h=120&q=80' },
-  { id: 'love', word: '사랑합니다', tip: '양손 주먹을 쥐고 가슴 앞에서 교차해 꼭 안아주세요! 💖', guideImg: 'https://images.unsplash.com/photo-1518199266791-5375a83190b7?auto=format&fit=crop&w=120&h=120&q=80' },
-  { id: 'congratulations', word: '축하합니다', tip: '양손 손가락을 모았다가 펴며 위로 올려 꽃 피우듯 피워요! 🎉', guideImg: 'https://images.unsplash.com/photo-1513151233558-d860c5398176?auto=format&fit=crop&w=120&h=120&q=80' },
-  { id: 'sorry', word: '죄송합니다', tip: '오른손 주먹을 쥐고 왼 가슴 부위에서 원을 그리며 쓸어요! 🙏', guideImg: 'https://images.unsplash.com/photo-1506784983877-45594efa4cbe?auto=format&fit=crop&w=120&h=120&q=80' }
+  { id: 'hello', word: '안녕하세요', tip: '오른손을 펴서 왼팔 위를 쓸어내린 다음, 두 주먹을 쥐고 가슴 앞에서 가볍게 아래로 내려요! 👋' },
+  { id: 'thankyou', word: '감사합니다', tip: '왼손 손바닥을 아래로 펴고, 오른손 손날로 왼손등을 두 번 가볍게 톡톡 탭해요! 🤝' },
+  { id: 'love', word: '사랑합니다', tip: '왼손은 주먹을 쥐어 세우고, 오른손바닥을 그 위에 얹어 둥글게 원을 그리듯 돌려요! 💖' },
+  { id: 'congratulations', word: '축하합니다', tip: '양손 엄지와 검지를 벌려 세우고 가슴 앞에서 동시에 쑥 위로 올려주세요! 🎉' },
+  { id: 'sorry', word: '죄송합니다', tip: '오른손 엄지와 검지 끝을 모아 동그라미(O)를 만들어 이마에 댔다가, 내리며 손을 활짝 펴요! 🙏' }
 ];
 
 export default function App() {
@@ -19,6 +19,9 @@ export default function App() {
   
   const [selectedWord, setSelectedWord] = useState(WORD_LIST[0].word);
   const [isCollecting, setIsCollecting] = useState(false);
+  const [countdown, setCountdown] = useState(null);
+  const [recordingProgress, setRecordingProgress] = useState(0);
+  
   const [counts, setCounts] = useState({
     '안녕하세요': 0,
     '감사합니다': 0,
@@ -33,7 +36,7 @@ export default function App() {
 
   // 1. 단어 선택 시 처리
   const handleWordSelect = (word) => {
-    if (isCollecting) return; // 수집 중에는 변경 금지
+    if (isCollecting || countdown !== null) return; // 수집 중이거나 카운트다운 중에는 변경 금지
     setSelectedWord(word);
     setUploadStatus({ status: 'idle', message: '' });
   };
@@ -54,9 +57,13 @@ export default function App() {
     }
 
     // 고유 파일 이름 생성 (학생 기기 식별 및 시간대 포함)
+    // Supabase Storage 경로에서 한글 깨짐 및 Invalid key 에러 방지를 위해 영어 ID 사용
+    const currentItem = WORD_LIST.find(item => item.word === selectedWord);
+    const wordId = currentItem ? currentItem.id : 'unknown';
+    
     const timestamp = Date.now();
     const randomId = Math.random().toString(36).substr(2, 5);
-    const fileName = `skeletons/${selectedWord}/hand_${timestamp}_${randomId}.png`;
+    const fileName = `skeletons/${wordId}/hand_${timestamp}_${randomId}.png`;
 
     try {
       setUploadStatus({ status: 'uploading', message: '데이터 실시간 전송 중...' });
@@ -97,14 +104,57 @@ export default function App() {
     }
   };
 
-  // 수집 시작/정지 토글
-  const toggleCollection = () => {
+  // 3. 3초 카운트다운 후 2초 버스트 녹화 실행
+  const startBurstCollection = () => {
+    if (isCollecting || countdown !== null || isMediaPipeLoading) return;
+
     if (counts[selectedWord] >= totalTarget) {
       // 카운트 초기화 후 재수집
       setCounts(prev => ({ ...prev, [selectedWord]: 0 }));
     }
-    setIsCollecting(!isCollecting);
     setUploadStatus({ status: 'idle', message: '' });
+
+    // 3초 카운트다운 시작
+    let count = 3;
+    setCountdown(count);
+
+    const countInterval = setInterval(() => {
+      count -= 1;
+      if (count > 0) {
+        setCountdown(count);
+      } else if (count === 0) {
+        setCountdown("시작! 🎬");
+      } else {
+        clearInterval(countInterval);
+        setCountdown(null);
+
+        // 2초간 버스트 자동 녹화 구동
+        setIsCollecting(true);
+        setRecordingProgress(0);
+
+        let elapsed = 0;
+        const duration = 2000; // 2초
+        const step = 100; // 100ms마다 프로그레스 업데이트
+
+        const progressInterval = setInterval(() => {
+          elapsed += step;
+          setRecordingProgress(Math.min(100, (elapsed / duration) * 100));
+
+          if (elapsed >= duration) {
+            clearInterval(progressInterval);
+            setIsCollecting(false);
+            setRecordingProgress(0);
+            setUploadStatus(prev => {
+              if (prev.status === 'error') return prev;
+              return { 
+                status: 'success', 
+                message: `✨ 1회 수어 녹화 완료! 동작이 끝나면 손을 자연스럽게 내려주세요.` 
+              };
+            });
+          }
+        }, step);
+      }
+    }, 1000);
   };
 
   return (
@@ -132,6 +182,27 @@ export default function App() {
         {/* 📋 왼쪽 단어 패널 및 가이드 (7 cols) */}
         <section className="md:col-span-7 flex flex-col gap-6 w-full">
           
+          {/* 📋 실시간 수어 동작 비주얼 가이드 패널 (텍스트 전용) */}
+          {(() => {
+            const currentItem = WORD_LIST.find(item => item.word === selectedWord);
+            if (!currentItem) return null;
+            return (
+              <div className="bg-[#FFFF00] border-4 border-black rounded-3xl p-6 shadow-brutal transition-all duration-300">
+                <div className="w-full text-left">
+                  <span className="text-[10px] font-black bg-black text-white px-3 py-1 rounded-full border-2 border-white uppercase tracking-wider inline-block">
+                    올바른 수어 자세 가이드
+                  </span>
+                  <h3 className="text-2xl font-black text-black mt-1 mb-2">
+                    '{selectedWord}'
+                  </h3>
+                  <div className="bg-white border-2 border-black p-4 rounded-xl text-xs md:text-sm font-black text-slate-800 shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] leading-relaxed">
+                    💡 {currentItem.tip}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* 가이드 패널 */}
           <div className="bg-[#47B5FF] border-4 border-black rounded-3xl p-6 shadow-brutal relative overflow-hidden">
             <h2 className="text-2xl font-black text-black mb-4 flex items-center gap-2">
@@ -219,34 +290,38 @@ export default function App() {
             isMediaPipeLoading={isMediaPipeLoading}
             isCollecting={isCollecting}
             onFrameCaptured={handleFrameCaptured}
+            countdown={countdown}
+            recordingProgress={recordingProgress}
           />
 
-          {/* 🔴 수집 제어 버튼 (네오브루탈리즘 거대 버튼) */}
+          {/* 🔴 수어 녹화 제어 버튼 (네오브루탈리즘 거대 버튼) */}
           <div className="w-full max-w-[480px]">
             <button
-              onClick={toggleCollection}
-              disabled={isMediaPipeLoading}
+              onClick={startBurstCollection}
+              disabled={isMediaPipeLoading || isCollecting || countdown !== null}
               className={`w-full py-5 brutal-btn-transition text-xl md:text-2xl font-black text-black border-4 border-black rounded-3xl shadow-brutal ${
-                isMediaPipeLoading ? 'opacity-50 cursor-not-allowed' : 'brutal-btn-hover brutal-btn-active'
-              } ${
-                isCollecting 
-                  ? 'bg-[#FF4A4A] text-white animate-pulse' 
-                  : 'bg-[#FFFF00] text-black'
+                (isMediaPipeLoading || isCollecting || countdown !== null)
+                  ? 'opacity-50 cursor-not-allowed bg-slate-300'
+                  : 'bg-[#FFFF00] brutal-btn-hover brutal-btn-active'
               }`}
             >
-              {isCollecting ? (
-                <span className="flex items-center justify-center gap-2">
-                  ⏹️ 데이터 수집 일시정지 (촬영 중...)
+              {countdown !== null ? (
+                <span className="flex items-center justify-center gap-2 animate-pulse text-black">
+                  ⏱️ 준비하세요... {countdown}
+                </span>
+              ) : isCollecting ? (
+                <span className="flex items-center justify-center gap-2 animate-pulse text-red-600">
+                  🎥 2초간 녹화 중! (수어 동작 취하기)
                 </span>
               ) : (
                 <span className="flex items-center justify-center gap-2">
-                  🔴 AI에게 데이터 학습시키기
+                  🔴 3초 후 2초간 수어 녹화하기
                 </span>
               )}
             </button>
             <p className="text-center text-xs font-black text-slate-700 mt-3 flex items-center justify-center gap-1">
               <HelpCircle size={14} />
-              버튼을 켜면 0.25초에 1장씩 자동으로 뼈대 이미지가 클라우드에 차곡차곡 쌓여요!
+              버튼을 누르면 3초의 준비 시간 후 딱 2초간만 자동으로 데이터가 안전하게 수집됩니다!
             </p>
           </div>
 

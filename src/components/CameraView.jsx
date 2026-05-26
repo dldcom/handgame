@@ -1,16 +1,20 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Camera, RefreshCw, Eye } from 'lucide-react';
 import { drawSkeletonToBlob, HAND_CONNECTIONS } from '../utils/canvasRenderer';
+import CameraSilhouette from './CameraSilhouette';
 
 export default function CameraView({ 
   detectFrame, 
   isMediaPipeLoading, 
   isCollecting, 
-  onFrameCaptured 
+  onFrameCaptured,
+  countdown,
+  recordingProgress
 }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const miniCanvasRef = useRef(null);
+  const lastCaptureTimeRef = useRef(0);
   const [hasCamera, setHasCamera] = useState(false);
   const [cameraError, setCameraError] = useState(null);
   const [stats, setStats] = useState({ fps: 0, handDetected: false });
@@ -82,10 +86,10 @@ export default function CameraView({
         ctx.drawImage(video, sx, sy, size, size, 0, 0, size, size);
         ctx.restore();
 
-        // 3. MediaPipe 관절 분석
-        const landmarks = detectFrame(video);
+        // 3. MediaPipe 관절 분석 (양손 데이터 배열 반환)
+        const hands = detectFrame(video);
         
-        if (landmarks) {
+        if (hands && hands.length > 0) {
           setStats(prev => ({ ...prev, handDetected: true }));
 
           // 메인 화면 위에 화려한 스켈레톤 라인 그리기
@@ -99,25 +103,28 @@ export default function CameraView({
             y: pt.y * canvas.height
           });
 
-          // 뼈대 선 그리기
-          HAND_CONNECTIONS.forEach(([from, to]) => {
-            const start = getMirroredCoords(landmarks[from]);
-            const end = getMirroredCoords(landmarks[to]);
+          // 감지된 모든 손을 메인 캔버스에 렌더링
+          hands.forEach(handLandmarks => {
+            // 뼈대 선 그리기
+            HAND_CONNECTIONS.forEach(([from, to]) => {
+              const start = getMirroredCoords(handLandmarks[from]);
+              const end = getMirroredCoords(handLandmarks[to]);
 
-            ctx.beginPath();
-            ctx.moveTo(start.x, start.y);
-            ctx.lineTo(end.x, end.y);
-            ctx.strokeStyle = '#00FF66'; // 눈에 확 띄는 야광 그린
-            ctx.stroke();
-          });
+              ctx.beginPath();
+              ctx.moveTo(start.x, start.y);
+              ctx.lineTo(end.x, end.y);
+              ctx.strokeStyle = '#00FF66'; // 야광 그린
+              ctx.stroke();
+            });
 
-          // 관절 점 그리기
-          ctx.fillStyle = '#FFFFFF';
-          landmarks.forEach(pt => {
-            const coord = getMirroredCoords(pt);
-            ctx.beginPath();
-            ctx.arc(coord.x, coord.y, 6, 0, 2 * Math.PI);
-            ctx.fill();
+            // 관절 점 그리기
+            ctx.fillStyle = '#FFFFFF';
+            handLandmarks.forEach(pt => {
+              const coord = getMirroredCoords(pt);
+              ctx.beginPath();
+              ctx.arc(coord.x, coord.y, 6, 0, 2 * Math.PI);
+              ctx.fill();
+            });
           });
 
           // 4. 'AI가 보는 화면' 미니 캔버스에도 동일하게 렌더링 (224x224 검은 배경)
@@ -125,55 +132,60 @@ export default function CameraView({
             miniCtx.fillStyle = '#000000';
             miniCtx.fillRect(0, 0, 224, 224);
 
-            // 손가락 위치 정규화 (canvasRenderer의 수식을 미니 캔버스 시각화에 적용)
-            let minX = Infinity, maxX = -Infinity;
-            let minY = Infinity, maxY = -Infinity;
+            const W = video.videoWidth;
+            const H = video.videoHeight;
+            const size = Math.min(W, H);
+            const sx = (W - size) / 2;
+            const sy = (H - size) / 2;
 
-            landmarks.forEach(pt => {
-              if (pt.x < minX) minX = pt.x;
-              if (pt.x > maxX) maxX = pt.x;
-              if (pt.y < minY) minY = pt.y;
-              if (pt.y > maxY) maxY = pt.y;
-            });
-
-            const w = maxX - minX;
-            const h = maxY - minY;
-            const cX = (minX + maxX) / 2;
-            const cY = (minY + maxY) / 2;
-            const maxDim = Math.max(w, h);
-            const scale = maxDim > 0 ? (224 * 0.75) / maxDim : 1;
-
-            const miniPoints = landmarks.map(pt => ({
-              x: 112 + (pt.x - cX) * scale,
-              y: 112 + (pt.y - cY) * scale
-            }));
-
-            // 선 그리기 (화려한 네온 컬러 대신 표준 검증용 화이트/그레이 또는 선명한 컬러)
             miniCtx.lineWidth = 4;
             miniCtx.lineCap = 'round';
             miniCtx.lineJoin = 'round';
             miniCtx.strokeStyle = '#00FF66';
 
-            HAND_CONNECTIONS.forEach(([from, to]) => {
-              const start = miniPoints[from];
-              const end = miniPoints[to];
-              miniCtx.beginPath();
-              miniCtx.moveTo(start.x, start.y);
-              miniCtx.lineTo(end.x, end.y);
-              miniCtx.stroke();
-            });
+            // 감지된 모든 손을 미니 캔버스에도 1:1 크롭 비율을 유지한 채 렌더링 (위치 보존)
+            hands.forEach(handLandmarks => {
+              const mappedPoints = handLandmarks.map(pt => {
+                const px = pt.x * W;
+                const py = pt.y * H;
+                const cx = px - sx;
+                const cy = py - sy;
+                return {
+                  x: (cx / size) * 224,
+                  y: (cy / size) * 224
+                };
+              });
 
-            miniCtx.fillStyle = '#FFFFFF';
-            miniPoints.forEach(pt => {
-              miniCtx.beginPath();
-              miniCtx.arc(pt.x, pt.y, 3, 0, 2 * Math.PI);
-              miniCtx.fill();
+              // 선 그리기
+              HAND_CONNECTIONS.forEach(([from, to]) => {
+                const start = mappedPoints[from];
+                const end = mappedPoints[to];
+                miniCtx.beginPath();
+                miniCtx.moveTo(start.x, start.y);
+                miniCtx.lineTo(end.x, end.y);
+                miniCtx.stroke();
+              });
+
+              // 관절 점 그리기
+              miniCtx.fillStyle = '#FFFFFF';
+              mappedPoints.forEach(pt => {
+                miniCtx.beginPath();
+                miniCtx.arc(pt.x, pt.y, 3, 0, 2 * Math.PI);
+                miniCtx.fill();
+              });
             });
           }
 
-          // 5. [수집 중] 상태이고 손이 감지되었다면 상위 컴포넌트로 정제된 이미지 전송
-          if (isCollecting && onFrameCaptured) {
-            drawSkeletonToBlob(landmarks, true)
+          // 5. [수집 중] 상태라면 상위 컴포넌트로 위치 보존형 1:1 크롭 이미지 전송 (250ms 쓰로틀링으로 렉 방지!)
+          const nowTime = performance.now();
+          if (isCollecting && onFrameCaptured && (nowTime - lastCaptureTimeRef.current >= 250)) {
+            lastCaptureTimeRef.current = nowTime;
+
+            drawSkeletonToBlob(hands, {
+              normalizeSize: false,
+              videoWidth: video.videoWidth,
+              videoHeight: video.videoHeight
+            })
               .then(blob => {
                 onFrameCaptured(blob);
               })
@@ -181,6 +193,12 @@ export default function CameraView({
           }
         } else {
           setStats(prev => ({ ...prev, handDetected: false }));
+          
+          // 손 감지되지 않았을 때 미니 캔버스를 빈 검은색으로 유지
+          if (miniCtx) {
+            miniCtx.fillStyle = '#000000';
+            miniCtx.fillRect(0, 0, 224, 224);
+          }
         }
 
         // FPS 계산
@@ -215,6 +233,28 @@ export default function CameraView({
           playsInline 
           className="hidden" 
         />
+
+        {/* 신체 정렬 가이드 실루엣 */}
+        {hasCamera && !isMediaPipeLoading && <CameraSilhouette />}
+
+        {/* 카운트다운 숫자 오버레이 */}
+        {countdown !== null && (
+          <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center z-30 pointer-events-none">
+            <span className="text-7xl md:text-9xl font-black text-[#FFFF00] drop-shadow-[5px_5px_0px_rgba(0,0,0,1)] animate-ping">
+              {countdown}
+            </span>
+          </div>
+        )}
+
+        {/* 녹화 진행 프로그레스 바 (네온 레드 하단 띠) */}
+        {isCollecting && recordingProgress > 0 && (
+          <div className="absolute bottom-0 left-0 right-0 h-4 bg-black border-t-4 border-black z-30 overflow-hidden">
+            <div 
+              className="bg-[#FF4A4A] h-full transition-all duration-100 ease-linear"
+              style={{ width: `${recordingProgress}%` }}
+            />
+          </div>
+        )}
 
         {/* 렌더링용 메인 Canvas */}
         <canvas 
