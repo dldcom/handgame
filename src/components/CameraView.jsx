@@ -28,10 +28,10 @@ export default function CameraView({
         setCameraError(null);
         stream = await navigator.mediaDevices.getUserMedia({
           video: {
-            width: { ideal: 640 },
-            height: { ideal: 480 },
-            facingMode: 'user',
-            aspectRatio: 1.0 // 정사각형 비율 권장 (브라우저가 최대한 맞춰줌)
+            width: { ideal: 1280 }, // 해상도를 높여 웹캠의 광각 모드를 유도
+            height: { ideal: 720 },
+            facingMode: 'user'
+            // aspectRatio: 1.0 제거 (웹캠에 따라 강제로 줌인(크롭)되는 현상 방지)
           },
           audio: false
         });
@@ -97,11 +97,17 @@ export default function CameraView({
           ctx.lineCap = 'round';
           ctx.lineJoin = 'round';
 
-          // 좌우 대칭이 되었으므로 그릴 때 좌표 반전 적용
-          const getMirroredCoords = (pt) => ({
-            x: (1 - pt.x) * canvas.width,
-            y: pt.y * canvas.height
-          });
+          // 크롭 영역 원점 보정 및 좌우 대칭(거울 모드) 좌표 계산
+          const getMirroredCoords = (pt) => {
+            const px = pt.x * video.videoWidth;
+            const py = pt.y * video.videoHeight;
+            const cx = px - ((video.videoWidth - size) / 2);
+            const cy = py - ((video.videoHeight - size) / 2);
+            return {
+              x: size - cx, // 좌우 반전
+              y: cy
+            };
+          };
 
           // 감지된 모든 손을 메인 캔버스에 렌더링
           hands.forEach(handLandmarks => {
@@ -176,21 +182,6 @@ export default function CameraView({
             });
           }
 
-          // 5. [수집 중] 상태라면 상위 컴포넌트로 위치 보존형 1:1 크롭 이미지 전송 (250ms 쓰로틀링으로 렉 방지!)
-          const nowTime = performance.now();
-          if (isCollecting && onFrameCaptured && (nowTime - lastCaptureTimeRef.current >= 250)) {
-            lastCaptureTimeRef.current = nowTime;
-
-            drawSkeletonToBlob(hands, {
-              normalizeSize: false,
-              videoWidth: video.videoWidth,
-              videoHeight: video.videoHeight
-            })
-              .then(blob => {
-                onFrameCaptured(blob);
-              })
-              .catch(err => console.error("스냅샷 캡처 에러:", err));
-          }
         } else {
           setStats(prev => ({ ...prev, handDetected: false }));
           
@@ -199,6 +190,14 @@ export default function CameraView({
             miniCtx.fillStyle = '#000000';
             miniCtx.fillRect(0, 0, 224, 224);
           }
+        }
+
+        // 5. [수집 중] 상태라면 상위 컴포넌트로 뼈대 좌표 배열을 바로 전송 (JSON 저장용)
+        const nowTime = performance.now();
+        // 66ms 간격으로 캡처 (1초에 약 15장, 2초에 30장) -> 수어 동작을 놓치지 않기 위함
+        if (isCollecting && onFrameCaptured && (nowTime - lastCaptureTimeRef.current >= 66)) {
+          lastCaptureTimeRef.current = nowTime;
+          onFrameCaptured(hands || []);
         }
 
         // FPS 계산
@@ -222,9 +221,12 @@ export default function CameraView({
   }, [detectFrame, isCollecting, onFrameCaptured]);
 
   return (
-    <div className="flex flex-col items-center w-full max-w-[480px]">
+    <div className="flex flex-row gap-4 items-center justify-center w-full max-w-[600px] h-full min-h-0">
       {/* 카메라 컨테이너 - 네오브루탈리즘 힙 디자인 */}
-      <div className="relative w-full aspect-square rounded-3xl border-4 border-black bg-slate-900 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden transition-all duration-300">
+      <div 
+        className="relative w-full aspect-square rounded-3xl border-4 border-black bg-slate-900 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] overflow-hidden transition-all duration-300"
+        style={{ maxHeight: '50vh', maxWidth: '50vh' }}
+      >
         
         {/* 숨김 처리된 원본 HTML Video */}
         <video 
@@ -295,12 +297,12 @@ export default function CameraView({
       </div>
 
       {/* 실시간 AI 뷰어 (미니 화면) - 네오브루탈리즘 힙 서브 패널 */}
-      <div className="mt-6 w-[180px] bg-black text-[#00FF66] border-4 border-black rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-3 relative overflow-hidden flex flex-col items-center">
-        <div className="flex items-center gap-1 text-[10px] font-black uppercase tracking-wider mb-2 text-[#00FF66]">
-          <Eye size={12} />
-          <span>AI's EYE (224 x 224)</span>
+      <div className="hidden md:flex flex-col items-center shrink-0 w-[140px] bg-black text-[#00FF66] border-4 border-black rounded-2xl shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] p-2 relative overflow-hidden">
+        <div className="flex items-center gap-1 text-[9px] font-black uppercase tracking-wider mb-2 text-[#00FF66]">
+          <Eye size={10} />
+          <span>AI's EYE</span>
         </div>
-        <div className="w-[128px] h-[128px] bg-slate-950 border-2 border-black rounded-lg overflow-hidden relative">
+        <div className="w-[100px] h-[100px] bg-slate-950 border-2 border-black rounded-lg overflow-hidden relative">
           <canvas 
             ref={miniCanvasRef} 
             width={224} 
