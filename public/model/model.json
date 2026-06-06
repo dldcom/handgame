@@ -5,12 +5,12 @@
   "modelTopology": {
     "class_name": "Sequential",
     "config": {
-      "name": "sequential_6",
+      "name": "sequential_1",
       "layers": [
         {
           "class_name": "LSTM",
           "config": {
-            "name": "lstm_LSTM16",
+            "name": "lstm_LSTM1",
             "trainable": true,
             "batch_input_shape": [
               null,
@@ -66,14 +66,14 @@
             "rate": 0.2,
             "noise_shape": null,
             "seed": null,
-            "name": "dropout_Dropout11",
+            "name": "dropout_Dropout1",
             "trainable": true
           }
         },
         {
           "class_name": "LSTM",
           "config": {
-            "name": "lstm_LSTM17",
+            "name": "lstm_LSTM2",
             "trainable": true,
             "units": 128,
             "activation": "relu",
@@ -123,14 +123,14 @@
             "rate": 0.2,
             "noise_shape": null,
             "seed": null,
-            "name": "dropout_Dropout12",
+            "name": "dropout_Dropout2",
             "trainable": true
           }
         },
         {
           "class_name": "LSTM",
           "config": {
-            "name": "lstm_LSTM18",
+            "name": "lstm_LSTM3",
             "trainable": true,
             "units": 64,
             "activation": "relu",
@@ -198,7 +198,7 @@
             "activity_regularizer": null,
             "kernel_constraint": null,
             "bias_constraint": null,
-            "name": "dense_Dense11",
+            "name": "dense_Dense1",
             "trainable": true
           }
         },
@@ -226,7 +226,7 @@
             "activity_regularizer": null,
             "kernel_constraint": null,
             "bias_constraint": null,
-            "name": "dense_Dense12",
+            "name": "dense_Dense2",
             "trainable": true
           }
         }
@@ -242,7 +242,7 @@
       ],
       "weights": [
         {
-          "name": "lstm_LSTM16/kernel",
+          "name": "lstm_LSTM1/kernel",
           "shape": [
             126,
             256
@@ -250,7 +250,7 @@
           "dtype": "float32"
         },
         {
-          "name": "lstm_LSTM16/recurrent_kernel",
+          "name": "lstm_LSTM1/recurrent_kernel",
           "shape": [
             64,
             256
@@ -258,14 +258,14 @@
           "dtype": "float32"
         },
         {
-          "name": "lstm_LSTM16/bias",
+          "name": "lstm_LSTM1/bias",
           "shape": [
             256
           ],
           "dtype": "float32"
         },
         {
-          "name": "lstm_LSTM17/kernel",
+          "name": "lstm_LSTM2/kernel",
           "shape": [
             64,
             512
@@ -273,7 +273,7 @@
           "dtype": "float32"
         },
         {
-          "name": "lstm_LSTM17/recurrent_kernel",
+          "name": "lstm_LSTM2/recurrent_kernel",
           "shape": [
             128,
             512
@@ -281,14 +281,14 @@
           "dtype": "float32"
         },
         {
-          "name": "lstm_LSTM17/bias",
+          "name": "lstm_LSTM2/bias",
           "shape": [
             512
           ],
           "dtype": "float32"
         },
         {
-          "name": "lstm_LSTM18/kernel",
+          "name": "lstm_LSTM3/kernel",
           "shape": [
             128,
             256
@@ -296,7 +296,7 @@
           "dtype": "float32"
         },
         {
-          "name": "lstm_LSTM18/recurrent_kernel",
+          "name": "lstm_LSTM3/recurrent_kernel",
           "shape": [
             64,
             256
@@ -304,14 +304,14 @@
           "dtype": "float32"
         },
         {
-          "name": "lstm_LSTM18/bias",
+          "name": "lstm_LSTM3/bias",
           "shape": [
             256
           ],
           "dtype": "float32"
         },
         {
-          "name": "dense_Dense11/kernel",
+          "name": "dense_Dense1/kernel",
           "shape": [
             64,
             64
@@ -319,14 +319,14 @@
           "dtype": "float32"
         },
         {
-          "name": "dense_Dense11/bias",
+          "name": "dense_Dense1/bias",
           "shape": [
             64
           ],
           "dtype": "float32"
         },
         {
-          "name": "dense_Dense12/kernel",
+          "name": "dense_Dense2/kernel",
           "shape": [
             64,
             3
@@ -334,7 +334,7 @@
           "dtype": "float32"
         },
         {
-          "name": "dense_Dense12/bias",
+          "name": "dense_Dense2/bias",
           "shape": [
             3
           ],
