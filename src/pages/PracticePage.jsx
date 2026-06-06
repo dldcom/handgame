@@ -66,9 +66,9 @@ export default function PracticePage() {
       utterance.voice = koVoice;
     }
     
-    // 어린아이처럼 통통 튀고 약간 빠른 톤 설정
-    utterance.pitch = 1.6;
-    utterance.rate = 1.1;
+    // 자연스러운 기본 목소리로 설정
+    utterance.pitch = 1.0;
+    utterance.rate = 1.0;
     
     synth.speak(utterance);
   }, [isMuted]);
