@@ -152,7 +152,7 @@ export default function PracticePage() {
   }, [appState, model, labels, speakText]);
 
   return (
-    <div className="h-[100dvh] overflow-hidden p-2 md:p-4 flex flex-col items-center bg-slate-50">
+    <div className="h-full overflow-hidden p-2 md:p-4 flex flex-col items-center bg-slate-50">
       
       {/* 헤더 영역 */}
       <header className="w-full max-w-[1000px] bg-black text-white border-4 border-black rounded-2xl p-4 mb-4 shadow-[4px_4px_0px_0px_rgba(71,181,255,1)] flex flex-row items-center justify-between shrink-0">

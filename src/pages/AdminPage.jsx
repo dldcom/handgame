@@ -295,7 +295,7 @@ export default function AdminDashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-100 p-6 md:p-12 font-sans flex flex-col items-center">
+    <div className="min-h-full bg-slate-100 p-6 md:p-12 font-sans flex flex-col items-center">
       <div className="w-full max-w-[1000px]">
         <header className="w-full bg-black text-white border-4 border-black rounded-3xl p-6 md:p-8 mb-8 flex flex-col md:flex-row items-center justify-between gap-4 shadow-[8px_8px_0px_0px_rgba(71,181,255,1)]">
           <div className="flex items-center gap-4 text-left w-full">

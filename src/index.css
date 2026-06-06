@@ -13,6 +13,12 @@ body {
   background-color: #FFFDE7; /* 네오브루탈리즘 특유의 힙하고 따뜻한 버터밀크 옐로우 색상 */
   color: #000000;
   overflow-x: hidden;
+  height: 100dvh;
+  padding-top: env(safe-area-inset-top);
+  padding-bottom: env(safe-area-inset-bottom);
+  padding-left: env(safe-area-inset-left);
+  padding-right: env(safe-area-inset-right);
+  box-sizing: border-box;
 }
 
 /* 힙한 네오브루탈리즘 인터랙션 유틸리티 */

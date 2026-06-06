@@ -179,7 +179,7 @@ export default function CollectionPage() {
   };
 
   return (
-    <div className="h-[100dvh] overflow-hidden p-2 md:p-4 flex flex-col items-center bg-slate-50">
+    <div className="h-full overflow-hidden p-2 md:p-4 flex flex-col items-center bg-slate-50">
       
       {/* 헤더 영역 (높이 및 여백 축소) */}
       <header className="w-full max-w-[1000px] bg-[#00FF66] border-4 border-black rounded-2xl p-3 md:p-4 mb-4 shadow-brutal-sm flex flex-row items-center justify-between shrink-0">
