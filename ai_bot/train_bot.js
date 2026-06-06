@@ -2,7 +2,6 @@ import fs from 'fs';
 import path from 'path';
 import dotenv from 'dotenv';
 import { createClient } from '@supabase/supabase-js';
-import * as tf from '@tensorflow/tfjs';
 
 // .env 파일 로드 (루트 폴더)
 dotenv.config({ path: path.resolve(process.cwd(), '.env') });
@@ -165,7 +164,7 @@ async function downloadAndPreprocess() {
 }
 
 // Node.js용 커스텀 모델 저장 핸들러 (순수 fs 기반)
-const getLocalSaveHandler = (dirPath) => {
+const getLocalSaveHandler = (dirPath, tf) => {
   return {
     save: async (modelArtifacts) => {
       if (!fs.existsSync(dirPath)) {
@@ -208,10 +207,19 @@ const getLocalSaveHandler = (dirPath) => {
   };
 };
 
-// 메인 학습 함수
+// 동적 엔진 로더 및 메인 학습 함수
 async function runTraining() {
   const startTime = Date.now();
   
+  let tf;
+  try {
+    tf = await import('@tensorflow/tfjs-node');
+    console.log("🚀 [엔진 1번] C++ 가속 엔진(@tensorflow/tfjs-node)이 감지되어 고속으로 구동됩니다!");
+  } catch (err) {
+    tf = await import('@tensorflow/tfjs');
+    console.log("⚠️ [엔진 2번] tfjs-node가 없어 순수 자바스크립트 엔진으로 구동됩니다 (속도 약간 느림).");
+  }
+
   const { X_arr, y_arr, word_labels } = await downloadAndPreprocess();
   
   if (X_arr.length === 0) {
@@ -263,14 +271,22 @@ async function runTraining() {
     epochs: 100,
     batchSize: 8,
     validationSplit: 0.2,
-    callbacks: tf.callbacks.earlyStopping({ monitor: 'val_loss', patience: 10 }),
-    verbose: 1
+    verbose: 0, // 기본 로그를 끄고 아래 커스텀 콜백으로 대체
+    callbacks: [
+      {
+        onEpochEnd: async (epoch, logs) => {
+          if ((epoch + 1) % 10 === 0 || epoch === 0) {
+            console.log(`[Epoch ${epoch + 1}/100] Loss: ${logs.loss.toFixed(4)} | Accuracy: ${(logs.acc * 100).toFixed(1)}%`);
+          }
+        }
+      }
+    ]
   });
 
   console.log("\n📦 웹사이트용(TF.js) 모델로 저장을 시작합니다...");
   
   // 로컬 파일시스템에 저장
-  await model.save(getLocalSaveHandler(PUBLIC_MODEL_DIR));
+  await model.save(getLocalSaveHandler(PUBLIC_MODEL_DIR, tf));
   
   // 레이블 정보 저장
   fs.writeFileSync(
