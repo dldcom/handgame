@@ -207,11 +207,11 @@ export default function PracticePage() {
         )}
       </div>
 
-      <main className="w-full max-w-[1000px] flex flex-col items-center flex-1 min-h-0 relative gap-4">
+      <main className="w-full max-w-[1000px] flex flex-col items-center flex-1 min-h-0 relative gap-2">
         
         {/* 카메라 영역 */}
-        <div className="w-full flex-1 relative flex justify-center items-center">
-          <div className="w-full max-w-[800px] aspect-video max-h-[50vh] relative z-10">
+        <div className="w-full flex-1 min-h-0 relative flex justify-center items-center">
+          <div className="w-full max-w-[800px] aspect-video max-h-full relative z-10">
             <CameraView 
               detectFrame={detectFrame}
               isMediaPipeLoading={isMediaPipeLoading}
@@ -232,18 +232,18 @@ export default function PracticePage() {
         </div>
 
         {/* 결과 출력기 영역 */}
-        <div className="w-full h-32 md:h-40 bg-white border-4 border-black rounded-3xl shadow-brutal flex items-center justify-center shrink-0 relative overflow-hidden">
+        <div className="w-full h-20 md:h-28 bg-white border-4 border-black rounded-3xl shadow-brutal flex items-center justify-center shrink-0 relative overflow-hidden">
           {appState === 'idle' ? (
-            <div className="text-2xl md:text-3xl font-black text-slate-400 flex items-center gap-2 animate-pulse">
-              <Play className="fill-slate-400" />
+            <div className="text-xl md:text-2xl font-black text-slate-400 flex items-center gap-2 animate-pulse">
+              <Play className="fill-slate-400" size={20} />
               수어 동작을 취해주세요...
             </div>
           ) : appState === 'recording' ? (
-            <div className="text-2xl md:text-3xl font-black text-black">
+            <div className="text-xl md:text-2xl font-black text-black">
               분석 중...
             </div>
           ) : (
-            <div className="text-5xl md:text-7xl font-black text-[#00FF66] [text-shadow:-4px_-4px_0_#000,4px_-4px_0_#000,-4px_4px_0_#000,4px_4px_0_#000] animate-in zoom-in spin-in-2 duration-300">
+            <div className="text-4xl md:text-6xl font-black text-[#00FF66] [text-shadow:-3px_-3px_0_#000,3px_-3px_0_#000,-3px_3px_0_#000,3px_3px_0_#000] animate-in zoom-in spin-in-2 duration-300">
               {resultText === '?' ? '🤔 다시 해보세요' : resultText}
             </div>
           )}
