@@ -34,3 +34,4 @@ __pycache__/
 venv/
 env/
 temp_model.h5
+ai_bot/dataset_cache/

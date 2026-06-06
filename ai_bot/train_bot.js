@@ -77,9 +77,15 @@ async function getDatasetState() {
   return state;
 }
 
-// 데이터 다운로드 및 전처리 함수
+// 데이터 다운로드 및 전처리 함수 (스마트 캐싱 적용)
+const DATASET_CACHE_DIR = path.resolve(process.cwd(), 'ai_bot/dataset_cache');
+
 async function downloadAndPreprocess() {
-  console.log("🚀 Supabase에서 데이터 다운로드 및 전처리를 시작합니다...");
+  console.log("🚀 클라우드 데이터 동기화 및 전처리를 시작합니다 (스마트 캐싱 가동)...");
+
+  if (!fs.existsSync(DATASET_CACHE_DIR)) {
+    fs.mkdirSync(DATASET_CACHE_DIR, { recursive: true });
+  }
 
   const { data: folders, error: rootError } = await supabase.storage.from(BUCKET_NAME).list('skeletons', { limit: 1000 });
   if (rootError) throw rootError;
@@ -89,13 +95,21 @@ async function downloadAndPreprocess() {
   const X_arr = [];
   const y_arr = [];
   const word_labels = [];
+  let downloadedCount = 0;
+  let cachedCount = 0;
 
   for (let i = 0; i < validFolders.length; i++) {
     const hexName = validFolders[i].name;
     const wordName = decodeHex(hexName);
     word_labels.push(wordName);
     
-    console.log(`[${i + 1}/${validFolders.length}] '${wordName}' 데이터 수집 중...`);
+    // 워드별 로컬 폴더 확인 및 생성
+    const wordCacheDir = path.join(DATASET_CACHE_DIR, hexName);
+    if (!fs.existsSync(wordCacheDir)) {
+      fs.mkdirSync(wordCacheDir, { recursive: true });
+    }
+    
+    console.log(`[${i + 1}/${validFolders.length}] '${wordName}' 데이터 동기화 중...`);
     
     const { data: files } = await supabase.storage.from(BUCKET_NAME).list(`skeletons/${hexName}`, { limit: 1000 });
     if (!files) continue;
@@ -104,10 +118,24 @@ async function downloadAndPreprocess() {
     
     for (const file of jsonFiles) {
       try {
-        const { data: blob, error: downloadError } = await supabase.storage.from(BUCKET_NAME).download(`skeletons/${hexName}/${file.name}`);
-        if (downloadError) throw downloadError;
+        const localFilePath = path.join(wordCacheDir, file.name);
+        let text;
         
-        const text = await blob.text();
+        // 캐시 확인 로직
+        if (fs.existsSync(localFilePath)) {
+          // 로컬 캐시에서 즉시 읽기
+          text = fs.readFileSync(localFilePath, 'utf8');
+          cachedCount++;
+        } else {
+          // 캐시에 없으면 클라우드에서 다운로드
+          const { data: blob, error: downloadError } = await supabase.storage.from(BUCKET_NAME).download(`skeletons/${hexName}/${file.name}`);
+          if (downloadError) throw downloadError;
+          
+          text = await blob.text();
+          fs.writeFileSync(localFilePath, text, 'utf8'); // 로컬에 영구 저장
+          downloadedCount++;
+        }
+        
         const data = JSON.parse(text);
         
         if (data.length < FRAMES_PER_SEQUENCE) continue;
@@ -128,6 +156,8 @@ async function downloadAndPreprocess() {
   }
 
   console.log(`\n✅ 데이터 전처리 완료!`);
+  console.log(`📦 이번에 새로 다운받은 파일: ${downloadedCount}개`);
+  console.log(`⚡ 로컬 캐시에서 고속으로 읽은 파일: ${cachedCount}개`);
   console.log(`총 샘플 수: ${X_arr.length}`);
   console.log(`단어 클래스 수: ${word_labels.length} (${word_labels.join(', ')})`);
 
@@ -258,48 +288,42 @@ async function runTraining() {
   console.log(`저장 위치: ${PUBLIC_MODEL_DIR}`);
 }
 
-// 감시 모드 실행
-async function startDaemon() {
-  console.log("🤖 AI 훈련 봇이 깨어났습니다. (10분마다 새로운 데이터 감지 모드)");
-  let lastState = {};
+// 감시 모드 실행 (이벤트 기반 무전기 수신 모드)
+let isTraining = false;
+
+function startWatchMode() {
+  console.log("🤖 AI 훈련 봇이 깨어났습니다. (Admin의 훈련 가동 신호 대기 중...)");
   
-  while (true) {
-    try {
-      console.log("\n🔍 클라우드 데이터 상태 확인 중...");
-      const currentState = await getDatasetState();
-      let shouldTrain = false;
-      
-      for (const [hexName, count] of Object.entries(currentState)) {
-        if (count >= 10) {
-          const lastCount = lastState[hexName] || 0;
-          if (count > lastCount) {
-            console.log(`💡 감지됨: '${decodeHex(hexName)}' 단어의 데이터가 추가되었습니다! (현재 ${count}세트)`);
-            shouldTrain = true;
-          }
-        }
-      }
-      
-      if (shouldTrain) {
-        console.log("🚀 새로운 데이터가 충분히 모였습니다. 자동 학습을 시작합니다!");
-        await runTraining();
-        lastState = currentState;
-        console.log("✅ 학습 및 배포 완료! 다시 감시 모드로 들어갑니다.");
-      } else {
-        console.log("💤 새로운 학습 조건(10세트 이상 변경됨)을 만족하는 데이터가 없습니다.");
-      }
-    } catch (err) {
-      console.error(`⚠️ 에러 발생 (재시도 대기): ${err.message}`);
+  const channel = supabase.channel('training_channel');
+  
+  channel.on('broadcast', { event: 'trigger_training' }, async (payload) => {
+    console.log(`\n💡 [${new Date().toLocaleTimeString()}] 프론트엔드로부터 훈련 시작 신호를 수신했습니다!`);
+    
+    if (isTraining) {
+      console.log("⚠️ 이미 훈련이 진행 중입니다. 중복 실행을 무시합니다.");
+      return;
     }
     
-    console.log("⏳ 10분(600초) 후 다시 검사합니다...");
-    await new Promise(resolve => setTimeout(resolve, 600000));
-  }
+    isTraining = true;
+    try {
+      await runTraining();
+      console.log("✅ 수동 트리거 학습 완료! 다시 대기 모드로 돌아갑니다.");
+    } catch (err) {
+      console.error(`⚠️ 학습 중 에러 발생: ${err.message}`);
+    } finally {
+      isTraining = false;
+    }
+  }).subscribe((status) => {
+    if (status === 'SUBSCRIBED') {
+      console.log("📡 Supabase 실시간 무전(Broadcast) 채널에 성공적으로 연결되었습니다.");
+    }
+  });
 }
 
 // 메인 실행 로직 분기
 const isWatchMode = process.argv.includes('--watch');
 if (isWatchMode) {
-  startDaemon();
+  startWatchMode();
 } else {
   runTraining().catch(console.error);
 }

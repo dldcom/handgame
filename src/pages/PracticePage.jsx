@@ -206,10 +206,10 @@ export default function PracticePage() {
             <CameraView 
               detectFrame={detectFrame}
               isMediaPipeLoading={isMediaPipeLoading}
-              isCollecting={appState === 'recording'}
+              isCollecting={appState !== 'cooldown'}
               onFrameCaptured={handleFrameCaptured}
               countdown={null}
-              recordingProgress={0}
+              recordingProgress={appState === 'recording' ? (sequenceBufferRef.current.length / TARGET_FRAMES) * 100 : 0}
             />
             
             {/* 녹화 상태 인디케이터 */}

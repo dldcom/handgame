@@ -268,6 +268,32 @@ export default function AdminDashboard() {
     }
   };
 
+  // 수동 훈련 트리거 함수 (Supabase Broadcast 활용)
+  const triggerTraining = async () => {
+    setActionStatus('📡 서버로 훈련 시작 신호를 전송하는 중...');
+    
+    const channel = supabase.channel('training_channel');
+    
+    channel.subscribe(async (status) => {
+      if (status === 'SUBSCRIBED') {
+        const res = await channel.send({
+          type: 'broadcast',
+          event: 'trigger_training',
+          payload: { timestamp: new Date().toISOString() },
+        });
+        
+        if (res === 'ok') {
+          setActionStatus('✨ 훈련 명령 전송 완료! 백엔드 서버에서 학습을 시작했습니다.');
+        } else {
+          setActionStatus('❌ 훈련 명령 전송에 실패했습니다.');
+        }
+        
+        // 전송 후 즉시 무전기(채널) 해제
+        supabase.removeChannel(channel);
+      }
+    });
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 p-6 md:p-12 font-sans flex flex-col items-center">
       <div className="w-full max-w-[1000px]">
@@ -299,13 +325,21 @@ export default function AdminDashboard() {
           <div className="w-full bg-white border-4 border-black rounded-3xl p-6 shadow-brutal">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b-4 border-black pb-4">
               <h2 className="text-2xl font-black">📂 저장된 수어 데이터 목록</h2>
-              <button 
-                onClick={fetchFolders}
-                disabled={isLoading}
-                className="flex items-center gap-2 bg-[#FFFF00] border-2 border-black px-4 py-2 rounded-xl font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 transition-transform"
-              >
-                <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} /> 새로고침
-              </button>
+              <div className="flex items-center gap-3">
+                <button 
+                  onClick={triggerTraining}
+                  className="flex items-center gap-2 bg-[#00FF66] border-2 border-black px-4 py-2 rounded-xl font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#00e65c] active:translate-x-0.5 active:translate-y-0.5 transition-all"
+                >
+                  🚀 훈련 가동하기
+                </button>
+                <button 
+                  onClick={fetchFolders}
+                  disabled={isLoading}
+                  className="flex items-center gap-2 bg-[#FFFF00] border-2 border-black px-4 py-2 rounded-xl font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] active:translate-x-0.5 active:translate-y-0.5 transition-transform"
+                >
+                  <RefreshCw size={16} className={isLoading ? "animate-spin" : ""} /> 새로고침
+                </button>
+              </div>
             </div>
 
             {isLoading && folders.length === 0 ? (
