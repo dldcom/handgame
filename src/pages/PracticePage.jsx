@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import * as tf from '@tensorflow/tfjs';
 import { useMediaPipe } from '../hooks/useMediaPipe';
 import CameraView from '../components/CameraView';
+import { supabase } from '../utils/supabaseClient';
 import { Brain, Volume2, VolumeX, Home, Loader2, Play } from 'lucide-react';
 import '../App.css';
 
@@ -76,10 +77,18 @@ export default function PracticePage() {
   useEffect(() => {
     const loadAiModel = async () => {
       try {
-        const loadedModel = await tf.loadLayersModel('/model/model.json');
+        const MODEL_BUCKET = 'models';
+        
+        // Supabase Storage에서 공용 URL 가져오기
+        const { data: { publicUrl: modelUrl } } = supabase.storage.from(MODEL_BUCKET).getPublicUrl('model.json');
+        const { data: { publicUrl: labelsUrl } } = supabase.storage.from(MODEL_BUCKET).getPublicUrl('word_labels.json');
+
+        // 모델 로드
+        const loadedModel = await tf.loadLayersModel(modelUrl);
         setModel(loadedModel);
         
-        const res = await fetch('/model/word_labels.json');
+        // 라벨 로드
+        const res = await fetch(labelsUrl);
         const loadedLabels = await res.json();
         setLabels(loadedLabels);
       } catch (err) {

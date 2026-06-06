@@ -93,12 +93,31 @@ export default function AdminDashboard() {
   const [folders, setFolders] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [actionStatus, setActionStatus] = useState('');
+  const [trainingResult, setTrainingResult] = useState(null); // 'loading', 'success', 'error'
 
   // 시퀀스 뷰어 상태
   const [selectedFolder, setSelectedFolder] = useState(null);
   const [sequenceFiles, setSequenceFiles] = useState([]);
   const [selectedSequenceData, setSelectedSequenceData] = useState(null);
   const [isImagesLoading, setIsImagesLoading] = useState(false);
+
+  // 훈련 결과 리스너 설정
+  useEffect(() => {
+    const channel = supabase.channel('training_channel')
+      .on('broadcast', { event: 'training_complete' }, () => {
+        setTrainingResult('success');
+        setActionStatus('✅ 학습이 성공적으로 완료되었습니다!');
+      })
+      .on('broadcast', { event: 'training_error' }, (payload) => {
+        setTrainingResult('error');
+        setActionStatus(`❌ 학습 중 오류 발생: ${payload.payload?.message || '오류'}`);
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, []);
 
   const fetchFolders = async () => {
     setIsLoading(true);
@@ -270,6 +289,7 @@ export default function AdminDashboard() {
 
   // 수동 훈련 트리거 함수 (Supabase Broadcast 활용)
   const triggerTraining = async () => {
+    setTrainingResult('loading');
     setActionStatus('📡 서버로 훈련 시작 신호를 전송하는 중...');
     
     const channel = supabase.channel('training_channel');
@@ -286,9 +306,12 @@ export default function AdminDashboard() {
           setActionStatus('✨ 훈련 명령 전송 완료! 백엔드 서버에서 학습을 시작했습니다.');
         } else {
           setActionStatus('❌ 훈련 명령 전송에 실패했습니다.');
+          setTrainingResult('error');
         }
         
-        // 전송 후 즉시 무전기(채널) 해제
+        // 주의: 여기서 채널을 해제하면 결과를 받을 수 없으므로 해제하지 않거나
+        // 별도의 리스너용 채널을 유지해야 함.
+        // 이미 useEffect에서 리스너용 채널을 생성했으므로 여기서는 전송용으로만 사용하고 닫아도 무방함.
         supabase.removeChannel(channel);
       }
     });
@@ -326,9 +349,23 @@ export default function AdminDashboard() {
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-6 border-b-4 border-black pb-4">
               <h2 className="text-2xl font-black">📂 저장된 수어 데이터 목록</h2>
               <div className="flex items-center gap-3">
+                {trainingResult === 'success' && (
+                  <span className="text-[#00FF66] font-black animate-bounce hidden md:inline">✅ 학습완료</span>
+                )}
+                {trainingResult === 'error' && (
+                  <span className="text-[#FF4A4A] font-black hidden md:inline">❌ 오류</span>
+                )}
+                {trainingResult === 'loading' && (
+                  <span className="text-slate-500 font-black animate-pulse hidden md:inline">⏳ 학습중...</span>
+                )}
                 <button 
                   onClick={triggerTraining}
-                  className="flex items-center gap-2 bg-[#00FF66] border-2 border-black px-4 py-2 rounded-xl font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] hover:bg-[#00e65c] active:translate-x-0.5 active:translate-y-0.5 transition-all"
+                  disabled={trainingResult === 'loading'}
+                  className={`flex items-center gap-2 border-2 border-black px-4 py-2 rounded-xl font-black shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all ${
+                    trainingResult === 'loading' 
+                      ? 'bg-slate-300 cursor-not-allowed' 
+                      : 'bg-[#00FF66] hover:bg-[#00e65c] active:translate-x-0.5 active:translate-y-0.5'
+                  }`}
                 >
                   🚀 훈련 가동하기
                 </button>

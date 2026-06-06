@@ -207,6 +207,34 @@ const getLocalSaveHandler = (dirPath, tf) => {
   };
 };
 
+// Supabase에 모델 파일 업로드 함수
+async function uploadModelToSupabase() {
+  console.log("📤 학습된 모델을 Supabase Storage에 업로드합니다...");
+  
+  const files = ['model.json', 'weights.bin', 'word_labels.json'];
+  const MODEL_BUCKET = 'models';
+
+  for (const fileName of files) {
+    const filePath = path.join(PUBLIC_MODEL_DIR, fileName);
+    if (!fs.existsSync(filePath)) continue;
+
+    const fileBuffer = fs.readFileSync(filePath);
+    
+    const { error } = await supabase.storage
+      .from(MODEL_BUCKET)
+      .upload(fileName, fileBuffer, {
+        contentType: fileName.endsWith('.json') ? 'application/json' : 'application/octet-stream',
+        upsert: true
+      });
+
+    if (error) {
+      console.error(`❌ ${fileName} 업로드 실패:`, error.message);
+    } else {
+      console.log(`✅ ${fileName} 업로드 완료!`);
+    }
+  }
+}
+
 // 동적 엔진 로더 및 메인 학습 함수
 async function runTraining() {
   const startTime = Date.now();
@@ -237,28 +265,22 @@ async function runTraining() {
   
   const model = tf.sequential();
   model.add(tf.layers.lstm({
-    units: 64,
+    units: 32,
     returnSequences: true,
-    activation: 'relu',
+    activation: 'tanh',
     inputShape: [FRAMES_PER_SEQUENCE, FEATURES_PER_FRAME]
   }));
-  model.add(tf.layers.dropout({ rate: 0.2 }));
-  model.add(tf.layers.lstm({
-    units: 128,
-    returnSequences: true,
-    activation: 'relu'
-  }));
-  model.add(tf.layers.dropout({ rate: 0.2 }));
+  model.add(tf.layers.dropout({ rate: 0.1 }));
   model.add(tf.layers.lstm({
     units: 64,
     returnSequences: false,
-    activation: 'relu'
+    activation: 'tanh'
   }));
-  model.add(tf.layers.dense({ units: 64, activation: 'relu' }));
+  model.add(tf.layers.dense({ units: 32, activation: 'relu' }));
   model.add(tf.layers.dense({ units: numClasses, activation: 'softmax' }));
 
   model.compile({
-    optimizer: 'adam',
+    optimizer: tf.train.adam(0.001),
     loss: 'categoricalCrossentropy',
     metrics: ['accuracy']
   });
@@ -295,6 +317,13 @@ async function runTraining() {
     'utf8'
   );
 
+  // --- 추가: Supabase 업로드 ---
+  try {
+    await uploadModelToSupabase();
+  } catch (err) {
+    console.error("⚠️ Supabase 모델 업로드 중 에러:", err.message);
+  }
+
   // 텐서 메모리 해제
   X.dispose();
   y.dispose();
@@ -324,8 +353,22 @@ function startWatchMode() {
     try {
       await runTraining();
       console.log("✅ 수동 트리거 학습 완료! 다시 대기 모드로 돌아갑니다.");
+      
+      // 프론트엔드에 완료 신호 전송
+      channel.send({
+        type: 'broadcast',
+        event: 'training_complete',
+        payload: { message: '학습 완료' }
+      });
     } catch (err) {
       console.error(`⚠️ 학습 중 에러 발생: ${err.message}`);
+      
+      // 프론트엔드에 에러 신호 전송
+      channel.send({
+        type: 'broadcast',
+        event: 'training_error',
+        payload: { message: err.message || '오류' }
+      });
     } finally {
       isTraining = false;
     }
